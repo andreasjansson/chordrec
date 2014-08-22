@@ -17,6 +17,11 @@ class Beat(object):
     def __str__(self):
         return self.__repr__()
 
+    def to_dict(self):
+        return {'chord': self.chord.to_dict(),
+                'start': self.start,
+                'end': self.end}
+
 class Chord(object):
     def __init__(self, root=None, quality=None):
         self.root = root
@@ -29,29 +34,31 @@ class Chord(object):
             s = '%s:%s' % (pitches.note_name(self.root), self.quality)
         return '<Chord: %s>' % s
 
+    def to_dict(self):
+        return {'root': self.root,
+                'quality': self.quality}
+        
 
-def chord_per_beat(chords_filename, echonest_filename):
+def chord_per_beat(chords_file, echonest_file):
     beats = []
-    with open(echonest_filename) as f:
-        analysis = json.load(f)
-        segments = analysis['segments']
-        for segment in segments:
-            start = segment['start']
-            end = segment['duration'] + start
-            beats.append(Beat(start=start, end=end))
+    analysis = json.load(echonest_file)
+    segments = analysis['segments']
+    for segment in segments:
+        start = segment['start']
+        end = segment['duration'] + start
+        beats.append(Beat(start=start, end=end))
 
     chords = []
-    with open(chords_filename) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
+    for line in chords_file:
+        line = line.strip()
+        if not line:
+            continue
 
-            start, end, chord = line.split('\t')
-            start = float(start)
-            end = float(end)
-            chord = parse_chord(chord)
-            chords.append((start, end, chord))
+        start, end, chord = line.split('\t')
+        start = float(start)
+        end = float(end)
+        chord = parse_chord(chord)
+        chords.append((start, end, chord))
 
     chords = beat_align(beats, chords)
     for beat, chord in zip(beats, chords):
