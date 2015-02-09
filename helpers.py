@@ -12,6 +12,7 @@ from collections import namedtuple
 
 import matplotlib.pyplot as plt
 plt.rcParams['figure.figsize'] = (10.0, 8.0)
+plt.rcParams['figure.facecolor'] = 'white'
 imshow = lambda x, *args, **kwargs: plt.imshow(x, interpolation='none', aspect='auto', cmap='hot', *args, **kwargs)
 
 def s3_get(path, unpickle=False):
@@ -72,8 +73,11 @@ class Chord(object):
         if self.root is None:
             s = self.quality
         else:
-            s = '%s:%s' % (get_note_name(self.root), self.quality)
+            s = self.to_string()
         return '<Chord: %s>' % s
+
+    def to_string(self):
+        return '%s:%s' % (NOTE_NAMES[self.root], self.quality)
 
     def to_dict(self):
         return {'root': self.root,
@@ -242,3 +246,34 @@ def get_note_name(note_number):
 
 def pitch_to_freq(pitch):
     return MIDI_FREQS[pitch]
+
+
+def axes_plot_with_notes(ax, pg, min_pitch, max_pitch):
+    ax.imshow(pg[:, min_pitch:max_pitch], interpolation='none', aspect='auto', cmap='hot')
+    labels = [NOTE_NAMES[i % 12] for i in range(min_pitch, max_pitch)]
+    ax.set_xticks(np.arange(max_pitch - min_pitch))
+    ax.set_xticklabels(labels, rotation=90, ha='center')
+
+def plot_with_notes(pg, min_pitch, max_pitch):
+    _, ax = plt.subplots(1, 1)
+    axes_plot_with_notes(ax, pg, min_pitch, max_pitch)
+
+def plot_with_notes_and_chords(pitchgram, chords, min_time, max_time, min_pitch, max_pitch):
+    _, ax = plt.subplots(1, 1)
+    axes_plot_with_notes(ax, pitchgram[min_time:max_time], min_pitch, max_pitch)
+    axes_add_chord_ticks(ax, chords[min_time:max_time])
+
+def axes_add_chord_ticks(ax, chords):
+    ax.yaxis.tick_right()
+    ticks = []
+    labels = []
+    prev = None
+    for i, c in enumerate(chords):
+        if c != prev:
+            ticks.append(i)
+            chord = Chord.from_number(c)
+            labels.append(chord.to_string)
+            prev = c
+    ax.set_yticks(ticks)
+    ax.set_yticklabels(labels)
+
