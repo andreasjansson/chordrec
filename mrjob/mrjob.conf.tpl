@@ -11,10 +11,12 @@ runners:
     ec2_key_pair: {{ AWS_KEYPAIR_NAME }}
     ec2_key_pair_file: {{ AWS_SSH_KEY_FILENAME }}
     aws_region: us-east-1
-    ec2_instance_type: m1.medium
-    ec2_master_instance_type: m1.medium
+    ec2_master_instance_type: c3.xlarge
+    ec2_master_instance_bid_price: 0.1
+    ec2_instance_type: c3.xlarge
+    ec2_core_instance_bid_price: 0.05
     ami_version: 3.1.1
-    num_ec2_instances: 3
+    num_ec2_instances: 11
     s3_log_uri: s3://{{ AWS_S3_BUCKET }}/mrjob/logs
     s3_scratch_uri: s3://{{ AWS_S3_BUCKET }}/mrjob/scratch
     ssh_tunnel_is_open: true

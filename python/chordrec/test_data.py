@@ -8,7 +8,11 @@ import json
 AUDIO_DIR = '/home/andreas/phd/data/billboard/audio'
 MCGILL_DIR = '/home/andreas/phd/data/billboard/McGill-Billboard'
 
-def get_test_data(count=1):
+seed = 17
+np.random.seed(seed)
+random.seed(seed)
+
+def get_test_data(count=1, return_class_vectors=True):
     test_data = []
     data_folders = glob('%s/*' % MCGILL_DIR)
     while len(test_data) < count:
@@ -22,25 +26,16 @@ def get_test_data(count=1):
         audio_path = '%s/%s' % (AUDIO_DIR, audio_filename)
         beats = mcgill.chord_per_beat(chords_filename, echonest_filename)
         pitchgram = get_beat_aligned_pitchgram(audio_path, beats)
-        classes = np.array([get_chord_number(b.chord) for b in beats])
-        test_data.append((pitchgram, classes))
+        classes = np.array([b.chord.get_number() for b in beats])
+
+        if return_class_vectors:
+            class_vectors = np.zeros((len(classes), np.max(classes) + 1))
+            class_vectors[range(len(classes)), classes] = 1
+            test_data.append((pitchgram, class_vectors))
+        else:
+            test_data.append((pitchgram, classes))
 
     return test_data
-
-def get_chord_number(chord):
-    if chord.root is None:
-        if chord.quality == mcgill.NO_CHORD:
-            return 24
-        else:
-            return 25
-    n = chord.root * 2
-
-    if chord.quality == 'maj':
-        return n
-    elif chord.quality == 'min':
-        return n + 1
-
-    raise Exception('Unknown chord: %s' % chord)
 
 def get_beat_aligned_pitchgram(audio_path, beats, min_pitch=3*12, max_pitch=7*12, window_size=4096, hop_size=2048):
     a = audio.read(audio_path).get_channel(0).downsample(4)

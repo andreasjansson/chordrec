@@ -37,9 +37,29 @@ class Chord(object):
     def to_dict(self):
         return {'root': self.root,
                 'quality': self.quality}
-        
+
+    def get_number(self):
+        if self.root is None:
+            if self.quality == NO_CHORD:
+                return 24
+            else:
+                return 25
+        n = self.root * 2
+
+        if self.quality == 'maj':
+            return n
+        elif self.quality == 'min':
+            return n + 1
+
+        raise Exception('Unknown chord: %s' % self)
 
 def chord_per_beat(chords_file, echonest_file):
+
+    if isinstance(chords_file, basestring):
+        chords_file = open(chords_file, 'r')
+    if isinstance(echonest_file, basestring):
+        echonest_file = open(echonest_file, 'r')
+
     beats = []
     analysis = json.load(echonest_file)
     segments = analysis['segments']

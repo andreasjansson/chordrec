@@ -2,9 +2,12 @@ import os
 import fabric.network
 import multiprocessing
 import datetime
+from boto.emr.connection import EmrConnection
 
 from headintheclouds.tasks import *
 from headintheclouds.tasks import terminate as hitc_terminate
+from headintheclouds.tasks import nodes as hitc_nodes
+from headintheclouds.util import print_table
 from headintheclouds import ec2
 
 env.forward_agent = True
@@ -33,35 +36,84 @@ def on_slaves(func):
     return task(wrapper)
 
 @cloudtask
-def tunnel_resourcemanager(local_port=9026, jobtracker_port=9026):
-    ssh_cmd = [
+def tunnel_hadoop(ports=[9026, 9046, 19888]):
+    master_node = get_node(master)
+    cmd = [
         'ssh',
         '-o', 'VerifyHostKeyDNS=no',
         '-o', 'StrictHostKeyChecking=no',
         '-o', 'ExitOnForwardFailure=yes',
-        '-L', '%d:ip-10-137-30-141.ec2.internal:%d' % (local_port, jobtracker_port),
+    ]
+    for port in ports:
+        cmd += ['-L', '%d:%s:%d' % (port, master_node['internal_address'], port)]
+
+    cmd += [
         '-i', env.key_filename,
         '-N',
         '%s@%s' % (env.user, env.host)
     ]
         
-    local(' '.join(ssh_cmd))
+    local(' '.join(cmd))
 
 @task
 @runs_once
 def create_job_flow():
+    local('envtpl --keep-template mrjob.conf.tpl')
     local('MRJOB_CONF=./mrjob.conf mrjob create-job-flow')
+    local('rm mrjob.conf')
+    cache.uncache(get_master)
+
+@task
+@runs_once
+def list_jobflows():
+    conn = EmrConnection()
+    table = []
+    for jf in conn.describe_jobflows():
+        if jf.state not in ('TERMINATED', 'FAILED'):
+            table.append({
+                'id': jf.jobflowid,
+                'created': jf.creationdatetime,
+                'state': jf.state,
+            })
+    print_table(table)
+
+@task
+@runs_once
+def terminate_jobflow(id):
+    conn = EmrConnection()
+    conn.terminate_jobflow(id)
 
 @cloudtask
 def upload_private_key():
     put(env.key_filename, '~/.ssh/private_key.pem')
+
+@task
+def run_job(script, input, output=None, jobflow=None):
+    s3_bucket = os.environ['AWS_S3_BUCKET']
+    if output is None:
+        output = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    output_dir = 's3://%s/mrjob/output/%s' % (s3_bucket, output)
+    local('envtpl --keep-template mrjob.conf.tpl')
+    cmd = [
+        'MRJOB_CONF=./mrjob.conf',
+        'python', script,
+        '-r', 'emr',
+        '--no-output',
+        '--output-dir', output_dir,
+    ]
+    if jobflow:
+        cmd += ['--emr-job-flow-id', jobflow]
+    cmd += [input]
+
+    local(' '.join(cmd))
+    local('rm mrjob.conf')
 
 @cache.cached
 def get_master():
     for host in env.hosts:
         if has_open_port(host, 22):
             return host
-    raise Exception('No master found')
+    return None
 
 @on_slaves
 def error_logs(application=None):
@@ -80,6 +132,13 @@ def get_slaves(master):
             slaves.add(node['internal_ip'])
     return slaves
 
+def get_node(ip):
+    nodes = ec2.all_nodes()
+    for node in nodes:
+        if node['ip'] == ip:
+            return node
+    return None
+
 def has_open_port(host, port, timeout=1):
     with settings(hide('everything'), warn_only=True):
         return not local('nc -w%d -z %s %s' % (timeout, host, port)).failed
@@ -95,6 +154,7 @@ def inside(slave):
 
 @task
 def bootstrap(directory='bootstrap', use_envtpl=False):
+    execute(upload_private_key)
     processes = ([BootstrapProcessMaster(directory, use_envtpl)] +
                  [BootstrapProcessSlave(directory, use_envtpl, slave) for slave in env.slaves])
     for p in processes:
@@ -112,16 +172,12 @@ def terminate():
     hosts = [n['ip'] for n in nodes]
     with settings(hosts=hosts):
         execute(hitc_terminate)
+    cache.uncache(get_master)
 
 @task
-def run_job(script, input, output=None):
-    s3_bucket = os.environ['AWS_S3_BUCKET']
-    if output is None:
-        output = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_dir = 's3://%s/mrjob/output/%s' % (s3_bucket, output)
-    local('envtpl --keep-template mrjob.conf.tpl')
-    local('MRJOB_CONF=./mrjob.conf python %s -r emr --no-output --output-dir=%s %s' % (script, output_dir, input))
-    local('rm mrjob.conf')
+def nodes():
+    hitc_nodes()
+    cache.uncache(get_master)
 
 class BootstrapProcess(multiprocessing.Process):
 
@@ -156,5 +212,8 @@ def master_settings():
     )
 
 master = get_master()
-env.slaves = get_slaves(master)
-env.hosts = [master]
+if master:
+    env.slaves = get_slaves(master)
+    env.hosts = [master]
+else:
+    env.hosts = []
