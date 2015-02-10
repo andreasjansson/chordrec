@@ -272,7 +272,7 @@ def axes_add_chord_ticks(ax, chords):
         if c != prev:
             ticks.append(i)
             chord = Chord.from_number(c)
-            labels.append(chord.to_string)
+            labels.append(chord.to_string())
             prev = c
     ax.set_yticks(ticks)
     ax.set_yticklabels(labels)
