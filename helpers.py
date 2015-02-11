@@ -10,6 +10,10 @@ from boto.s3.key import Key
 import sys
 from collections import namedtuple
 
+import theano
+import theano.tensor as T
+
+
 import matplotlib.pyplot as plt
 plt.rcParams['figure.figsize'] = (10.0, 8.0)
 plt.rcParams['figure.facecolor'] = 'white'
