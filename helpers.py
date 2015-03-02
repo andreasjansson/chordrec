@@ -12,7 +12,7 @@ from collections import namedtuple
 
 import theano
 import theano.tensor as T
-
+floatX = theano.config.floatX
 
 import matplotlib.pyplot as plt
 plt.rcParams['figure.figsize'] = (10.0, 8.0)
